@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fluffy Bird Ultra Deluxe</title>
+<title>Fluffy Bird Ultra Deluxe Pro</title>
 
 <style>
 body{
@@ -17,17 +17,14 @@ font-family:sans-serif;
 touch-action:manipulation;
 overflow:hidden;
 }
-
 #gameBox{
 position:relative;
 width:100%;
 height:100%;
 }
-
 canvas{
 display:block;
 }
-
 #ui{
 position:absolute;
 top:10px;
@@ -38,7 +35,6 @@ font-size:16px;
 text-shadow:2px 2px 4px black;
 z-index:10;
 }
-
 #centerMsg{
 position:absolute;
 top:45%;
@@ -50,7 +46,6 @@ text-shadow:3px 3px 6px black;
 display:none;
 z-index:10;
 }
-
 #ai{
 cursor:pointer;
 user-select:none;
@@ -59,61 +54,60 @@ user-select:none;
 </head>
 
 <body>
-
 <div id="gameBox">
 <div id="ui">
 Score: <span id="score">0</span><br>
 High: <span id="high">0</span><br>
 AI: <span id="ai">OFF</span>
 </div>
-
 <div id="centerMsg"></div>
 <canvas id="game"></canvas>
 </div>
 
 <script>
-const canvas=document.getElementById("game")
-const ctx=canvas.getContext("2d")
+// Canvas
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
 
-let scoreEl=document.getElementById("score")
-let highEl=document.getElementById("high")
-let aiEl=document.getElementById("ai")
-let msg=document.getElementById("centerMsg")
+// UI
+let scoreEl = document.getElementById("score");
+let highEl = document.getElementById("high");
+let aiEl = document.getElementById("ai");
+let msg = document.getElementById("centerMsg");
 
-let highScore=localStorage.getItem("fluffyHigh")||0
-highEl.textContent=highScore
+let highScore = localStorage.getItem("fluffyHigh") || 0;
+highEl.textContent = highScore;
 
-let bird={
-x:80,
-y:200,
-size:18,
-velocity:0,
-gravity:0.5,
-lift:-8,
-frame:0
-}
+// Game variables
+let bird = {x:80, y:200, size:18, velocity:0, gravity:0.5, lift:-8, frame:0, wingFrame:0};
+let pipes = [];
+let particles = [];
+let clouds = [];
+let mountains = [];
+let score = 0;
+let frame = 0;
+let gameOver = false;
+let paused = false;
+let ai = false;
 
-let pipes=[]
-let particles=[]
-let clouds=[]
-let score=0
-let frame=0
-let gameOver=false
-let paused=false
-let ai=false
+let groundX = 0;
 
-let groundX=0
-let skyHue=200
-
-// create clouds
+// Cloud setup
 for(let i=0;i<5;i++){
-clouds.push({
-x:Math.random()*400,
-y:Math.random()*150,
-speed:0.3+Math.random()*0.3
-})
+clouds.push({x:Math.random()*400, y:Math.random()*150, speed:0.3+Math.random()*0.3});
 }
 
+// Mountain layers (for parallax)
+for(let i=0;i<3;i++){
+mountains.push({
+x:0,
+y:canvas.height-50-(i*30),
+color:i==0?"#556B2F":i==1?"#2E8B57":"#1B5E20",
+speed:0.2 + i*0.1
+});
+}
+
+// Beep
 function beep(freq,time=0.1){
 let audio=new(window.AudioContext||window.webkitAudioContext)()
 let osc=audio.createOscillator()
@@ -123,257 +117,261 @@ osc.start()
 osc.stop(audio.currentTime+time)
 }
 
+// Flap
 function flap(){
-if(paused) return
-if(gameOver){
-restart()
-return
-}
-bird.velocity=bird.lift
-beep(500)
+if(paused) return;
+if(gameOver){restart(); return;}
+bird.velocity = bird.lift;
+beep(500);
 }
 
-// keyboard controls
-document.addEventListener("keydown",e=>{
-if(e.code==="Space") flap()
+// Keyboard
+document.addEventListener("keydown", e=>{
+if(e.code==="Space") flap();
 if(e.key==="p"||e.key==="P"){
-paused=!paused
-msg.style.display=paused?"block":"none"
-msg.innerHTML="PAUSED"
+paused=!paused;
+msg.style.display=paused?"block":"none";
+msg.innerHTML="PAUSED";
 }
 if(e.key==="a"||e.key==="A"){
-toggleAI()
+toggleAI();
 }
-})
+});
 
-// tap controls
-canvas.addEventListener("click",flap)
-canvas.addEventListener("touchstart",flap)
+// Tap
+canvas.addEventListener("click", flap);
+canvas.addEventListener("touchstart", flap);
 
 function toggleAI(){
-ai=!ai
-aiEl.textContent=ai?"ON":"OFF"
+ai=!ai;
+aiEl.textContent=ai?"ON":"OFF";
 }
-aiEl.addEventListener("click",toggleAI)
-aiEl.addEventListener("touchstart",function(e){
-e.preventDefault()
-toggleAI()
-})
+aiEl.addEventListener("click", toggleAI);
+aiEl.addEventListener("touchstart", e=>{e.preventDefault(); toggleAI();});
 
+// Pipe creation
 function createPipe(){
-let gap=130
-let top=Math.random()*250+20
-pipes.push({
-x:400,
-w:60,
-top:top,
-bottom:top+gap,
-passed:false
-})
+let gap=130;
+let top=Math.random()*250+20;
+pipes.push({x:400, w:60, top:top, bottom:top+gap, passed:false});
 }
 
+// AI
 function aiControl(){
-let next=pipes.find(p=>p.x+p.w>bird.x)
-if(!next) return
-let mid=(next.top+next.bottom)/2
-if(bird.y>mid) bird.velocity=bird.lift
+let next=pipes.find(p=>p.x+p.w>bird.x);
+if(!next) return;
+let mid=(next.top+next.bottom)/2;
+if(bird.y>mid) bird.velocity=bird.lift;
 }
 
+// Particles
 function createParticles(x,y){
 for(let i=0;i<8;i++){
-particles.push({
-x:x,
-y:y,
-vx:(Math.random()-0.5)*4,
-vy:(Math.random()-0.5)*4,
-life:25
-})
+particles.push({x:x,y:y,vx:(Math.random()-0.5)*4,vy:(Math.random()-0.5)*4,life:25});
 }
 }
 
+// Update
 function update(){
-if(paused||gameOver) return
-frame++
-if(frame%90===0) createPipe()
-if(ai) aiControl()
+if(paused||gameOver) return;
+frame++;
+if(frame%90===0) createPipe();
+if(ai) aiControl();
 
-bird.velocity+=bird.gravity
-bird.y+=bird.velocity
+bird.velocity+=bird.gravity;
+bird.y+=bird.velocity;
 
-if(bird.y>canvas.height-40 || bird.y<0) endGame()
+// Ground/top collision
+if(bird.y>canvas.height-40 || bird.y<0) endGame();
 
-groundX-=2
-if(groundX<=-400) groundX=0
+groundX-=2;
+if(groundX<=-400) groundX=0;
 
+// Pipes collision & scoring
 pipes.forEach(pipe=>{
-pipe.x-=2
-if(
-bird.x < pipe.x+pipe.w &&
-bird.x+bird.size > pipe.x &&
-(bird.y < pipe.top || bird.y+bird.size > pipe.bottom)
-){
-endGame()
-}
+pipe.x-=2;
+if(bird.x < pipe.x+pipe.w && bird.x+bird.size > pipe.x && (bird.y < pipe.top || bird.y+bird.size > pipe.bottom)){endGame();}
 if(!pipe.passed && pipe.x+pipe.w<bird.x){
-pipe.passed=true
-score++
-scoreEl.textContent=score
-createParticles(bird.x,bird.y)
-beep(800)
+pipe.passed=true;
+score++;
+scoreEl.textContent=score;
+createParticles(bird.x,bird.y);
+beep(800);
 }
-})
+});
+pipes=pipes.filter(p=>p.x>-80);
 
-pipes=pipes.filter(p=>p.x>-80)
-
-// clouds move faster with milestones every 100 points
+// Clouds speed
 clouds.forEach(c=>{
-let speedBoost = 1 + Math.floor(score/100)*0.5
-c.x -= c.speed * speedBoost
-if(c.x < -60) c.x = canvas.width + 60
-})
+let speedBoost = 1 + Math.floor(score/100)*0.5;
+c.x -= c.speed * speedBoost;
+if(c.x < -60) c.x = canvas.width + 60;
+});
 
-particles.forEach(p=>{
-p.x+=p.vx
-p.y+=p.vy
-p.life--
-})
-particles=particles.filter(p=>p.life>0)
+// Particles update
+particles.forEach(p=>{p.x+=p.vx; p.y+=p.vy; p.life--;});
+particles = particles.filter(p=>p.life>0);
+
+// Bird wing animation
+bird.wingFrame = (bird.wingFrame + 1) % 20;
+
+// Mountains scroll
+mountains.forEach(m=>{
+m.x -= m.speed*(1 + Math.floor(score/100)*0.3);
+if(m.x<-canvas.width) m.x=0;
+});
 }
 
-// HD Sky with milestone every 100 points
+// Draw Sky
 function drawSky(){
-let level = Math.floor(score/100)
-let hue = (200 + level*40)%360
-ctx.fillStyle = `hsl(${hue},70%,70%)`
-ctx.fillRect(0,0,canvas.width,canvas.height)
+let level = Math.floor(score/100);
+let hue = (200 + level*40)%360;
+ctx.fillStyle = `hsl(${hue},70%,70%)`;
+ctx.fillRect(0,0,canvas.width,canvas.height);
 }
 
-// HD Clouds
+// Draw Mountains (parallax)
+function drawMountains(){
+mountains.forEach(m=>{
+ctx.fillStyle = m.color;
+ctx.beginPath();
+ctx.moveTo(m.x,canvas.height);
+ctx.lineTo(m.x, m.y);
+ctx.lineTo(m.x+canvas.width, m.y);
+ctx.lineTo(m.x+canvas.width,canvas.height);
+ctx.closePath();
+ctx.fill();
+});
+}
+
+// Draw Clouds
 function drawClouds(){
-ctx.fillStyle="white"
+ctx.fillStyle="white";
 clouds.forEach(c=>{
-let x=c.x * canvas.width/400
-let y=c.y * canvas.height/500
-ctx.beginPath()
-ctx.arc(x,y,20*canvas.width/400,0,Math.PI*2)
-ctx.arc(x+20*canvas.width/400,y+8*canvas.height/500,20*canvas.width/400,0,Math.PI*2)
-ctx.arc(x-20*canvas.width/400,y+8*canvas.height/500,20*canvas.width/400,0,Math.PI*2)
-ctx.fill()
-})
+let x=c.x*canvas.width/400;
+let y=c.y*canvas.height/500;
+ctx.beginPath();
+ctx.arc(x,y,20*canvas.width/400,0,Math.PI*2);
+ctx.arc(x+20*canvas.width/400,y+8*canvas.height/500,20*canvas.width/400,0,Math.PI*2);
+ctx.arc(x-20*canvas.width/400,y+8*canvas.height/500,20*canvas.width/400,0,Math.PI*2);
+ctx.fill();
+});
 }
 
-// HD Pipes
+// Draw Pipes with texture
 function drawPipes(){
 pipes.forEach(pipe=>{
-let x = pipe.x * canvas.width/400
-let w = pipe.w * canvas.width/400
-let top = pipe.top * canvas.height/500
-let bottom = pipe.bottom * canvas.height/500
-let grad=ctx.createLinearGradient(x,0,x+w,0)
-grad.addColorStop(0,"#2ecc71")
-grad.addColorStop(1,"#27ae60")
-ctx.fillStyle=grad
-ctx.fillRect(x,0,w,top)
-ctx.fillRect(x,bottom,w,canvas.height)
-ctx.fillStyle="#1e874b"
-ctx.fillRect(x-6,top-12,w+12,12)
-ctx.fillRect(x-6,bottom,w+12,12)
-})
+let x = pipe.x*canvas.width/400;
+let w = pipe.w*canvas.width/400;
+let top = pipe.top*canvas.height/500;
+let bottom = pipe.bottom*canvas.height/500;
+let grad = ctx.createLinearGradient(x,0,x+w,0);
+grad.addColorStop(0,"#4CAF50");
+grad.addColorStop(0.5,"#2E7D32");
+grad.addColorStop(1,"#4CAF50");
+ctx.fillStyle=grad;
+ctx.fillRect(x,0,w,top);
+ctx.fillRect(x,bottom,w,canvas.height);
+ctx.fillStyle="#1B5E20";
+ctx.fillRect(x-6,top-12,w+12,12);
+ctx.fillRect(x-6,bottom,w+12,12);
+});
 }
 
-// HD Bird
+// Draw Bird with animated wings
 function drawBird(){
-let s = bird.size * canvas.width/400
-bird.frame++
-let bx = bird.x * canvas.width/400
-let by = bird.y * canvas.height/500
-
-ctx.fillStyle="#FFD93B"
-ctx.beginPath()
-ctx.arc(bx+s/2,by+s/2,s/2,0,Math.PI*2)
-ctx.fill()
-
-ctx.fillStyle="orange"
-ctx.beginPath()
-ctx.moveTo(bx+s,by+s/2)
-ctx.lineTo(bx+s+10*canvas.width/400,by+s/2-5*canvas.height/500)
-ctx.lineTo(bx+s+10*canvas.width/400,by+s/2+5*canvas.height/500)
-ctx.fill()
-
-ctx.fillStyle="white"
-ctx.beginPath()
-ctx.arc(bx+s*0.65,by+s*0.35,s*0.18,0,Math.PI*2)
-ctx.fill()
-
-ctx.fillStyle="black"
-ctx.beginPath()
-ctx.arc(bx+s*0.7,by+s*0.35,s*0.08,0,Math.PI*2)
-ctx.fill()
+let s = bird.size * canvas.width/400;
+let bx = bird.x*canvas.width/400;
+let by = bird.y*canvas.height/500;
+ctx.fillStyle="#FFD93B";
+ctx.beginPath();
+ctx.arc(bx+s/2,by+s/2,s/2,0,Math.PI*2);
+ctx.fill();
+// Wing flapping
+ctx.fillStyle="orange";
+ctx.beginPath();
+let wingY = Math.sin(bird.wingFrame/2)*5*canvas.height/500;
+ctx.moveTo(bx+s,by+s/2);
+ctx.lineTo(bx+s+12*canvas.width/400,by+s/2-5*canvas.height/500+wingY);
+ctx.lineTo(bx+s+12*canvas.width/400,by+s/2+5*canvas.height/500+wingY);
+ctx.fill();
+// Eye
+ctx.fillStyle="white";
+ctx.beginPath();
+ctx.arc(bx+s*0.65,by+s*0.35,s*0.18,0,Math.PI*2);
+ctx.fill();
+ctx.fillStyle="black";
+ctx.beginPath();
+ctx.arc(bx+s*0.7,by+s*0.35,s*0.08,0,Math.PI*2);
+ctx.fill();
 }
 
+// Draw Particles
 function drawParticles(){
-ctx.fillStyle="white"
-particles.forEach(p=>{
-ctx.fillRect(p.x,p.y,3,3)
-})
+ctx.fillStyle="white";
+particles.forEach(p=>{ctx.fillRect(p.x,p.y,3,3);});
 }
 
+// Draw Ground
 function drawGround(){
-ctx.fillStyle="#d9a066"
-ctx.fillRect(groundX,canvas.height-40,400,40)
-ctx.fillRect(groundX+400,canvas.height-40,400,40)
+ctx.fillStyle="#d9a066";
+ctx.fillRect(groundX,canvas.height-40,400,40);
+ctx.fillRect(groundX+400,canvas.height-40,400,40);
 }
 
+// Draw everything
 function draw(){
-ctx.clearRect(0,0,canvas.width,canvas.height)
-drawSky()
-drawClouds()
-drawPipes()
-drawGround()
-drawBird()
-drawParticles()
+ctx.clearRect(0,0,canvas.width,canvas.height);
+drawSky();
+drawMountains();
+drawClouds();
+drawPipes();
+drawGround();
+drawBird();
+drawParticles();
 }
 
+// Game over
 function endGame(){
-gameOver=true
-msg.style.display="block"
-msg.innerHTML="GAME OVER<br>Tap or Space"
-beep(200,0.3)
+gameOver=true;
+msg.style.display="block";
+msg.innerHTML="GAME OVER<br>Tap or Space";
+beep(200,0.3);
 if(score>highScore){
-highScore=score
-localStorage.setItem("fluffyHigh",score)
-highEl.textContent=score
+highScore=score;
+localStorage.setItem("fluffyHigh",score);
+highEl.textContent=score;
 }
 }
 
+// Restart
 function restart(){
-bird.y=200
-bird.velocity=0
-pipes=[]
-particles=[]
-score=0
-frame=0
-gameOver=false
-scoreEl.textContent=0
-msg.style.display="none"
+bird.y=200;
+bird.velocity=0;
+pipes=[];
+particles=[];
+score=0;
+frame=0;
+gameOver=false;
+scoreEl.textContent=0;
+msg.style.display="none";
 }
 
-// fullscreen canvas
+// Fullscreen
 function resizeGame(){
-canvas.width = window.innerWidth
-canvas.height = window.innerHeight
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 }
-window.addEventListener("resize",resizeGame)
-resizeGame()
+window.addEventListener("resize",resizeGame);
+resizeGame();
 
+// Game loop
 function loop(){
-update()
-draw()
-requestAnimationFrame(loop)
+update();
+draw();
+requestAnimationFrame(loop);
 }
-
-loop()
+loop();
 </script>
-
 </body>
 </html>
