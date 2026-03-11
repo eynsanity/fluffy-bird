@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html>
 <head>
@@ -50,6 +51,12 @@ color:white;
 font-size:32px;
 text-shadow:3px 3px 6px black;
 display:none;
+}
+
+/* AI text tappable */
+#ai{
+cursor:pointer;
+user-select:none;
 }
 
 </style>
@@ -148,14 +155,24 @@ msg.innerHTML="PAUSED"
 }
 
 if(e.key==="a"||e.key==="A"){
-ai=!ai
-aiEl.textContent=ai?"ON":"OFF"
+toggleAI()
 }
 
 })
 
 canvas.addEventListener("click",flap)
 canvas.addEventListener("touchstart",flap)
+
+function toggleAI(){
+ai=!ai
+aiEl.textContent=ai?"ON":"OFF"
+}
+
+aiEl.addEventListener("click",toggleAI)
+aiEl.addEventListener("touchstart",function(e){
+e.preventDefault()
+toggleAI()
+})
 
 function createPipe(){
 
@@ -406,4 +423,3 @@ loop()
 </body>
 </html>
 ```
-
