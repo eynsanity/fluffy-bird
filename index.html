@@ -1,35 +1,35 @@
+```html
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Fluffy Bird Ultra Deluxe</title>
-
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 
 <style>
 
 body{
 margin:0;
-background:#000;
+background:#87CEEB;
 display:flex;
 justify-content:center;
 align-items:center;
 height:100vh;
 font-family:sans-serif;
-overflow:hidden;
+touch-action:manipulation;
 }
 
 #gameBox{
 position:relative;
-width:95vw;
-max-width:420px;
+width:90vw;
+max-width:400px;
 }
 
 canvas{
-width:100%;
-height:auto;
 border:4px solid #333;
 background:#70c5ce;
+width:100%;
+height:auto;
 }
 
 #ui{
@@ -38,32 +38,19 @@ top:10px;
 left:10px;
 color:white;
 font-weight:bold;
-font-size:14px;
+font-size:16px;
 text-shadow:2px 2px 4px black;
 }
 
-#menu{
+#centerMsg{
 position:absolute;
-top:0;
-left:0;
+top:45%;
 width:100%;
-height:100%;
-background:rgba(0,0,0,0.7);
-display:flex;
-flex-direction:column;
-justify-content:center;
-align-items:center;
+text-align:center;
 color:white;
-z-index:5;
-}
-
-button{
-padding:12px 25px;
-margin:10px;
-font-size:18px;
-border:none;
-border-radius:8px;
-cursor:pointer;
+font-size:32px;
+text-shadow:3px 3px 6px black;
+display:none;
 }
 
 </style>
@@ -73,21 +60,13 @@ cursor:pointer;
 
 <div id="gameBox">
 
-<div id="menu">
-<h1>Fluffy Bird</h1>
-<p>Select Difficulty</p>
-
-<button onclick="goFullscreen();startGame('easy')">Easy</button>
-<button onclick="goFullscreen();startGame('medium')">Medium</button>
-<button onclick="goFullscreen();startGame('hard')">Hard</button>
-
-</div>
-
 <div id="ui">
 Score: <span id="score">0</span><br>
 High: <span id="high">0</span><br>
 AI: <span id="ai">OFF</span>
 </div>
+
+<div id="centerMsg"></div>
 
 <canvas id="game" width="400" height="500"></canvas>
 
@@ -98,18 +77,10 @@ AI: <span id="ai">OFF</span>
 const canvas=document.getElementById("game")
 const ctx=canvas.getContext("2d")
 
-let menu=document.getElementById("menu")
 let scoreEl=document.getElementById("score")
 let highEl=document.getElementById("high")
 let aiEl=document.getElementById("ai")
-
-let difficulty="medium"
-
-let pipeSpeed=2
-let pipeGap=130
-let spawnRate=90
-
-let skyTime=0
+let msg=document.getElementById("centerMsg")
 
 let highScore=localStorage.getItem("fluffyHigh")||0
 highEl.textContent=highScore
@@ -120,64 +91,42 @@ y:200,
 size:18,
 velocity:0,
 gravity:0.5,
-lift:-8
+lift:-8,
+frame:0
 }
 
 let pipes=[]
+let particles=[]
+let clouds=[]
 let score=0
 let frame=0
 let gameOver=false
+let paused=false
 let ai=false
 
-let stars=[]
+let groundX=0
+let skyHue=200
 
-for(let i=0;i<40;i++){
-stars.push({
+for(let i=0;i<5;i++){
+clouds.push({
 x:Math.random()*400,
-y:Math.random()*200
+y:Math.random()*150,
+speed:0.3+Math.random()*0.3
 })
 }
 
-function goFullscreen(){
-
-let elem=document.documentElement
-
-if(elem.requestFullscreen){
-elem.requestFullscreen()
-}else if(elem.webkitRequestFullscreen){
-elem.webkitRequestFullscreen()
-}
-
-}
-
-function startGame(level){
-
-difficulty=level
-
-if(level==="easy"){
-pipeGap=160
-pipeSpeed=1.8
-spawnRate=110
-}
-
-if(level==="medium"){
-pipeGap=130
-pipeSpeed=2.2
-spawnRate=90
-}
-
-if(level==="hard"){
-pipeGap=100
-pipeSpeed=3
-spawnRate=70
-}
-
-menu.style.display="none"
-restart()
-
+function beep(freq,time=0.1){
+let audio=new(window.AudioContext||window.webkitAudioContext)()
+let osc=audio.createOscillator()
+osc.frequency.value=freq
+osc.connect(audio.destination)
+osc.start()
+osc.stop(audio.currentTime+time)
 }
 
 function flap(){
+
+if(paused) return
 
 if(gameOver){
 restart()
@@ -185,12 +134,19 @@ return
 }
 
 bird.velocity=bird.lift
+beep(500)
 
 }
 
 document.addEventListener("keydown",e=>{
 
 if(e.code==="Space") flap()
+
+if(e.key==="p"||e.key==="P"){
+paused=!paused
+msg.style.display=paused?"block":"none"
+msg.innerHTML="PAUSED"
+}
 
 if(e.key==="a"||e.key==="A"){
 ai=!ai
@@ -204,13 +160,14 @@ canvas.addEventListener("touchstart",flap)
 
 function createPipe(){
 
+let gap=130
 let top=Math.random()*250+20
 
 pipes.push({
 x:400,
 w:60,
 top:top,
-bottom:top+pipeGap,
+bottom:top+gap,
 passed:false
 })
 
@@ -222,30 +179,33 @@ let next=pipes.find(p=>p.x+p.w>bird.x)
 
 if(!next) return
 
-let futureY=bird.y + bird.velocity*8
+let mid=(next.top+next.bottom)/2
 
-let safeTop=next.top+10
-let safeBottom=next.bottom-10
+if(bird.y>mid) bird.velocity=bird.lift
 
-if(futureY>safeBottom){
-bird.velocity=bird.lift
 }
 
-if(bird.y<safeTop){
-bird.velocity+=0.2
+function createParticles(x,y){
+
+for(let i=0;i<8;i++){
+particles.push({
+x:x,
+y:y,
+vx:(Math.random()-0.5)*4,
+vy:(Math.random()-0.5)*4,
+life:25
+})
 }
 
 }
 
 function update(){
 
-if(gameOver) return
+if(paused||gameOver) return
 
 frame++
 
-skyTime+=0.001
-
-if(frame%spawnRate===0) createPipe()
+if(frame%90===0) createPipe()
 
 if(ai) aiControl()
 
@@ -254,9 +214,14 @@ bird.y+=bird.velocity
 
 if(bird.y>460||bird.y<0) endGame()
 
+groundX-=2
+if(groundX<=-400) groundX=0
+
+skyHue+=0.02
+
 pipes.forEach(pipe=>{
 
-pipe.x-=pipeSpeed
+pipe.x-=2
 
 if(
 bird.x < pipe.x+pipe.w &&
@@ -267,34 +232,77 @@ endGame()
 }
 
 if(!pipe.passed && pipe.x+pipe.w<bird.x){
+
 pipe.passed=true
 score++
 scoreEl.textContent=score
+createParticles(bird.x,bird.y)
+beep(800)
+
 }
 
 })
 
 pipes=pipes.filter(p=>p.x>-80)
 
+clouds.forEach(c=>{
+c.x-=c.speed
+if(c.x<-60) c.x=460
+})
+
+particles.forEach(p=>{
+p.x+=p.vx
+p.y+=p.vy
+p.life--
+})
+
+particles=particles.filter(p=>p.life>0)
+
 }
 
 function drawSky(){
 
-let hue=200
-let light=70 + Math.sin(skyTime)*25
-
-ctx.fillStyle=`hsl(${hue},70%,${light}%)`
+let color="hsl("+skyHue+",70%,70%)"
+ctx.fillStyle=color
 ctx.fillRect(0,0,400,500)
 
-if(Math.sin(skyTime)<-0.3){
+}
+
+function drawClouds(){
 
 ctx.fillStyle="white"
 
-stars.forEach(s=>{
-ctx.fillRect(s.x,s.y,2,2)
+clouds.forEach(c=>{
+ctx.beginPath()
+ctx.arc(c.x,c.y,15,0,Math.PI*2)
+ctx.arc(c.x+15,c.y+5,15,0,Math.PI*2)
+ctx.arc(c.x-15,c.y+5,15,0,Math.PI*2)
+ctx.fill()
 })
 
 }
+
+function drawGround(){
+
+ctx.fillStyle="#d9a066"
+ctx.fillRect(groundX,460,400,40)
+ctx.fillRect(groundX+400,460,400,40)
+
+}
+
+function drawBird(){
+
+bird.frame++
+
+ctx.fillStyle="yellow"
+
+if(bird.frame%20<10)
+ctx.fillRect(bird.x,bird.y,bird.size,bird.size)
+else
+ctx.fillRect(bird.x,bird.y-3,bird.size,bird.size)
+
+ctx.fillStyle="black"
+ctx.fillRect(bird.x+10,bird.y+5,4,4)
 
 }
 
@@ -303,19 +311,27 @@ function drawPipes(){
 ctx.fillStyle="#2ecc71"
 
 pipes.forEach(pipe=>{
+
 ctx.fillRect(pipe.x,0,pipe.w,pipe.top)
 ctx.fillRect(pipe.x,pipe.bottom,pipe.w,500)
+
+ctx.fillStyle="#27ae60"
+ctx.fillRect(pipe.x-5,pipe.top-10,pipe.w+10,10)
+ctx.fillRect(pipe.x-5,pipe.bottom,pipe.w+10,10)
+
+ctx.fillStyle="#2ecc71"
+
 })
 
 }
 
-function drawBird(){
+function drawParticles(){
 
-ctx.fillStyle="yellow"
-ctx.fillRect(bird.x,bird.y,bird.size,bird.size)
+ctx.fillStyle="white"
 
-ctx.fillStyle="black"
-ctx.fillRect(bird.x+10,bird.y+5,4,4)
+particles.forEach(p=>{
+ctx.fillRect(p.x,p.y,3,3)
+})
 
 }
 
@@ -324,23 +340,26 @@ function draw(){
 ctx.clearRect(0,0,400,500)
 
 drawSky()
+drawClouds()
 drawPipes()
+drawGround()
 drawBird()
+drawParticles()
 
 }
 
 function endGame(){
 
 gameOver=true
+msg.style.display="block"
+msg.innerHTML="GAME OVER<br>Tap or Space"
+beep(200,0.3)
 
 if(score>highScore){
 highScore=score
 localStorage.setItem("fluffyHigh",score)
 highEl.textContent=score
 }
-
-menu.style.display="flex"
-menu.innerHTML="<h1>Game Over</h1><p>Score: "+score+"</p><button onclick='location.reload()'>Menu</button>"
 
 }
 
@@ -349,12 +368,29 @@ function restart(){
 bird.y=200
 bird.velocity=0
 pipes=[]
+particles=[]
 score=0
 frame=0
 gameOver=false
 scoreEl.textContent=0
+msg.style.display="none"
 
 }
+
+function resizeGame(){
+
+let scale=Math.min(
+window.innerWidth/400,
+window.innerHeight/500
+)
+
+canvas.style.width=400*scale+"px"
+canvas.style.height=500*scale+"px"
+
+}
+
+window.addEventListener("resize",resizeGame)
+resizeGame()
 
 function loop(){
 
@@ -370,3 +406,4 @@ loop()
 
 </body>
 </html>
+```
