@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Fluffy Bird Ultra Deluxe</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+
+<style>
+
+body{
+margin:0;
+background:#000;
+display:flex;
+justify-content:center;
+align-items:center;
+height:100vh;
+font-family:sans-serif;
+overflow:hidden;
+}
+
+#gameBox{
+position:relative;
+width:95vw;
+max-width:420px;
+}
+
+canvas{
+width:100%;
+height:auto;
+border:4px solid #333;
+background:#70c5ce;
+}
+
+#ui{
+position:absolute;
+top:10px;
+left:10px;
+color:white;
+font-weight:bold;
+font-size:14px;
+text-shadow:2px 2px 4px black;
+}
+
+#menu{
+position:absolute;
+top:0;
+left:0;
+width:100%;
+height:100%;
+background:rgba(0,0,0,0.7);
+display:flex;
+flex-direction:column;
+justify-content:center;
+align-items:center;
+color:white;
+z-index:5;
+}
+
+button{
+padding:12px 25px;
+margin:10px;
+font-size:18px;
+border:none;
+border-radius:8px;
+cursor:pointer;
+}
+
+</style>
+</head>
+
+<body>
+
+<div id="gameBox">
+
+<div id="menu">
+<h1>Fluffy Bird</h1>
+<p>Select Difficulty</p>
+
+<button onclick="goFullscreen();startGame('easy')">Easy</button>
+<button onclick="goFullscreen();startGame('medium')">Medium</button>
+<button onclick="goFullscreen();startGame('hard')">Hard</button>
+
+</div>
+
+<div id="ui">
+Score: <span id="score">0</span><br>
+High: <span id="high">0</span><br>
+AI: <span id="ai">OFF</span>
+</div>
+
+<canvas id="game" width="400" height="500"></canvas>
+
+</div>
+
+<script>
+
+const canvas=document.getElementById("game")
+const ctx=canvas.getContext("2d")
+
+let menu=document.getElementById("menu")
+let scoreEl=document.getElementById("score")
+let highEl=document.getElementById("high")
+let aiEl=document.getElementById("ai")
+
+let difficulty="medium"
+
+let pipeSpeed=2
+let pipeGap=130
+let spawnRate=90
+
+let skyTime=0
+
+let highScore=localStorage.getItem("fluffyHigh")||0
+highEl.textContent=highScore
+
+let bird={
+x:80,
+y:200,
+size:18,
+velocity:0,
+gravity:0.5,
+lift:-8
+}
+
+let pipes=[]
+let score=0
+let frame=0
+let gameOver=false
+let ai=false
+
+let stars=[]
+
+for(let i=0;i<40;i++){
+stars.push({
+x:Math.random()*400,
+y:Math.random()*200
+})
+}
+
+function goFullscreen(){
+
+let elem=document.documentElement
+
+if(elem.requestFullscreen){
+elem.requestFullscreen()
+}else if(elem.webkitRequestFullscreen){
+elem.webkitRequestFullscreen()
+}
+
+}
+
+function startGame(level){
+
+difficulty=level
+
+if(level==="easy"){
+pipeGap=160
+pipeSpeed=1.8
+spawnRate=110
+}
+
+if(level==="medium"){
+pipeGap=130
+pipeSpeed=2.2
+spawnRate=90
+}
+
+if(level==="hard"){
+pipeGap=100
+pipeSpeed=3
+spawnRate=70
+}
+
+menu.style.display="none"
+restart()
+
+}
+
+function flap(){
+
+if(gameOver){
+restart()
+return
+}
+
+bird.velocity=bird.lift
+
+}
+
+document.addEventListener("keydown",e=>{
+
+if(e.code==="Space") flap()
+
+if(e.key==="a"||e.key==="A"){
+ai=!ai
+aiEl.textContent=ai?"ON":"OFF"
+}
+
+})
+
+canvas.addEventListener("click",flap)
+canvas.addEventListener("touchstart",flap)
+
+function createPipe(){
+
+let top=Math.random()*250+20
+
+pipes.push({
+x:400,
+w:60,
+top:top,
+bottom:top+pipeGap,
+passed:false
+})
+
+}
+
+function aiControl(){
+
+let next=pipes.find(p=>p.x+p.w>bird.x)
+
+if(!next) return
+
+let futureY=bird.y + bird.velocity*8
+
+let safeTop=next.top+10
+let safeBottom=next.bottom-10
+
+if(futureY>safeBottom){
+bird.velocity=bird.lift
+}
+
+if(bird.y<safeTop){
+bird.velocity+=0.2
+}
+
+}
+
+function update(){
+
+if(gameOver) return
+
+frame++
+
+skyTime+=0.001
+
+if(frame%spawnRate===0) createPipe()
+
+if(ai) aiControl()
+
+bird.velocity+=bird.gravity
+bird.y+=bird.velocity
+
+if(bird.y>460||bird.y<0) endGame()
+
+pipes.forEach(pipe=>{
+
+pipe.x-=pipeSpeed
+
+if(
+bird.x < pipe.x+pipe.w &&
+bird.x+bird.size > pipe.x &&
+(bird.y < pipe.top || bird.y+bird.size > pipe.bottom)
+){
+endGame()
+}
+
+if(!pipe.passed && pipe.x+pipe.w<bird.x){
+pipe.passed=true
+score++
+scoreEl.textContent=score
+}
+
+})
+
+pipes=pipes.filter(p=>p.x>-80)
+
+}
+
+function drawSky(){
+
+let hue=200
+let light=70 + Math.sin(skyTime)*25
+
+ctx.fillStyle=`hsl(${hue},70%,${light}%)`
+ctx.fillRect(0,0,400,500)
+
+if(Math.sin(skyTime)<-0.3){
+
+ctx.fillStyle="white"
+
+stars.forEach(s=>{
+ctx.fillRect(s.x,s.y,2,2)
+})
+
+}
+
+}
+
+function drawPipes(){
+
+ctx.fillStyle="#2ecc71"
+
+pipes.forEach(pipe=>{
+ctx.fillRect(pipe.x,0,pipe.w,pipe.top)
+ctx.fillRect(pipe.x,pipe.bottom,pipe.w,500)
+})
+
+}
+
+function drawBird(){
+
+ctx.fillStyle="yellow"
+ctx.fillRect(bird.x,bird.y,bird.size,bird.size)
+
+ctx.fillStyle="black"
+ctx.fillRect(bird.x+10,bird.y+5,4,4)
+
+}
+
+function draw(){
+
+ctx.clearRect(0,0,400,500)
+
+drawSky()
+drawPipes()
+drawBird()
+
+}
+
+function endGame(){
+
+gameOver=true
+
+if(score>highScore){
+highScore=score
+localStorage.setItem("fluffyHigh",score)
+highEl.textContent=score
+}
+
+menu.style.display="flex"
+menu.innerHTML="<h1>Game Over</h1><p>Score: "+score+"</p><button onclick='location.reload()'>Menu</button>"
+
+}
+
+function restart(){
+
+bird.y=200
+bird.velocity=0
+pipes=[]
+score=0
+frame=0
+gameOver=false
+scoreEl.textContent=0
+
+}
+
+function loop(){
+
+update()
+draw()
+requestAnimationFrame(loop)
+
+}
+
+loop()
+
+</script>
+
+</body>
+</html>
